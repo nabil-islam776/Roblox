@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mini Roblox 2 Players Mobile+PC</title>
+<style>
+html, body {margin:0;padding:0;overflow:hidden;width:100%;height:100%; background:black;}
+#ui{
+ position:absolute; top:10px; left:10px; color:white;
+ background:rgba(26, 25, 25, 0.78); padding:10px; border-radius:8px; font-family:Arial; z-index:10;
+}
+canvas { display:block; width:100%; height:100%; }
+
+#mobile-controls{
+ position:absolute; bottom:10px; left:10px; width:calc(100% - 20px); display:flex; justify-content:space-between; z-index:20;
+}
+.joystick, .jump-btn{
+ background:rgba(255,255,255,0.3); border-radius:50%; width:60px; height:60px; touch-action:none;
+ display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; user-select:none;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+</head>
+<body>
+
+<div id="ui">
+Click/tap to lock mouse<br>
+Player1: WASD + Space | Player2: Arrows + 0 jump<br>
+V = toggle 1st/3rd person camera<br>
+Green safe, Red boxes = death
+</div>
+
+<!-- Mobile Controls -->
+<div id="mobile-controls">
+ <div class="joystick" id="move1">⮝</div>
+ <div class="jump-btn" id="jump1">Jump</div>
+</div>
+
+<script>
+// --- Scene ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// --- Light ---
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,20,10);
+scene.add(light);
+
+// --- Ground ---
+const ground = new THREE.Mesh(new THREE.BoxGeometry(50,1,50), new THREE.MeshLambertMaterial({color:0x00aa00}));
+ground.position.y=-1; scene.add(ground);
+
+// --- Boxes ---
+let boxes=[];
+for(let i=0;i<10;i++){
+ let box = new THREE.Mesh(new THREE.BoxGeometry(3,3,3), new THREE.MeshLambertMaterial({color:0xff0000}));
+ box.position.set(Math.random()*40-20,1.5,Math.random()*40-20);
+ scene.add(box); boxes.push(box);
+}
+
+// --- Player Creation ---
+function createPlayer(color, faceUrl){
+  const loader = new THREE.TextureLoader();
+  const group = new THREE.Object3D();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1,1,0.5), new THREE.MeshLambertMaterial({color:color}));
+  group.add(body);
+  const hat = new THREE.Mesh(new THREE.CircleGeometry(0.7,32), new THREE.MeshBasicMaterial({color:0xff0000}));
+  hat.rotation.x=-Math.PI/2; hat.position.y=0.6;
+  body.add(hat);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8), new THREE.MeshLambertMaterial({map:loader.load(faceUrl)}));
+  head.position.y=1; group.add(head);
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.8,0.3), new THREE.MeshLambertMaterial({color:color}));
+  leftArm.position.set(-0.65,0.1,0); group.add(leftArm);
+  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.8,0.3), new THREE.MeshLambertMaterial({color:color}));
+  rightArm.position.set(0.65,0.1,0); group.add(rightArm);
+  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.8,0.3), new THREE.MeshLambertMaterial({color:color}));
+  leftLeg.position.set(-0.2,-0.9,0); group.add(leftLeg);
+  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.8,0.3), new THREE.MeshLambertMaterial({color:color}));
+  rightLeg.position.set(0.2,-0.9,0); group.add(rightLeg);
+  return group;
+}
+
+// --- Players ---
+const player1 = new THREE.Object3D();
+player1.position.set(-2,0.5,0);
+player1.model = createPlayer(0x0000ff,"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAzBE_P3rPclK8gJnC-y1Mq7kNOvyL8yUHlg&s");
+player1.add(player1.model);
+scene.add(player1);
+
+const player2 = new THREE.Object3D();
+player2.position.set(2,0.5,0);
+player2.model = createPlayer(0xffff00,"https://5.imimg.com/data5/ECOM/Default/2023/8/330945953/BM/KN/BS/90605508/1690876821556-sku-4039-1.jpg");
+player2.add(player2.model);
+scene.add(player2);
+
+// --- Controls ---
+let keys={};
+let vY1=0, vY2=0; let jump1=false, jump2=false;
+let yaw=0,pitch=0; let thirdPerson=true;
+let moveDir1={x:0,z:0};
+
+// PC controls
+document.addEventListener("keydown",e=>{ keys[e.key.toLowerCase()]=true; if(e.key.toLowerCase()==="v") thirdPerson=!thirdPerson;});
+document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+document.addEventListener("click",()=>document.body.requestPointerLock());
+document.addEventListener("mousemove",(e)=>{
+ if(document.pointerLockElement===document.body){
+   yaw -= e.movementX*0.002; pitch -= e.movementY*0.002;
+   pitch=Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+ }
+});
+
+// Mobile controls
+const move1 = document.getElementById("move1");
+move1.addEventListener("touchstart",()=>{ moveDir1.z=1;});
+move1.addEventListener("touchend",()=>{ moveDir1.z=0;});
+const jumpBtn1 = document.getElementById("jump1");
+jumpBtn1.addEventListener("touchstart",()=>{ if(!jump1) vY1=0.25; jump1=true;});
+jumpBtn1.addEventListener("touchend",()=>{});
+
+// --- Death ---
+function checkDeath(player){ for(let box of boxes){
+ let dx=player.position.x-box.position.x;
+ let dy=player.position.y-box.position.y;
+ let dz=player.position.z-box.position.z;
+ if(Math.abs(dx)<2 && Math.abs(dy)<2 && Math.abs(dz)<2){
+   player.position.set(0,0.5,0); }}}
+function checkSafe(player){ if(Math.abs(player.position.x)>25 || Math.abs(player.position.z)>25){ player.position.set(0,0.5,0); }}
+
+// --- Animate ---
+function animate(){
+ requestAnimationFrame(animate);
+ let speed=0.15;
+
+ // Player1
+ let f1=new THREE.Vector3(0,0,-1).applyQuaternion(player1.quaternion);
+ let r1=new THREE.Vector3(1,0,0).applyQuaternion(player1.quaternion);
+ if(keys["w"] || moveDir1.z>0) player1.position.add(f1.clone().multiplyScalar(speed));
+ if(keys["s"]) player1.position.add(f1.clone().multiplyScalar(-speed));
+ if(keys["a"]) player1.position.add(r1.clone().multiplyScalar(-speed));
+ if(keys["d"]) player1.position.add(r1.clone().multiplyScalar(speed));
+ vY1-=0.01; player1.position.y+=vY1;
+ if(player1.position.y<=0.5){player1.position.y=0.5; vY1=0; jump1=false;}
+
+ // Player2
+ let f2=new THREE.Vector3(0,0,-1).applyQuaternion(player2.quaternion);
+ let r2=new THREE.Vector3(1,0,0).applyQuaternion(player2.quaternion);
+ if(keys["arrowup"]) player2.position.add(f2.clone().multiplyScalar(speed));
+ if(keys["arrowdown"]) player2.position.add(f2.clone().multiplyScalar(-speed));
+ if(keys["arrowleft"]) player2.position.add(r2.clone().multiplyScalar(-speed));
+ if(keys["arrowright"]) player2.position.add(r2.clone().multiplyScalar(speed));
+ if(keys["0"] && !jump2){ vY2=0.25; jump2=true;}
+ vY2-=0.01; player2.position.y+=vY2;
+ if(player2.position.y<=0.5){player2.position.y=0.5; vY2=0; jump2=false;}
+
+ checkDeath(player1); checkDeath(player2);
+ checkSafe(player1); checkSafe(player2);
+
+ // Camera
+ if(thirdPerson){
+   player1.model.visible=true;
+   camera.position.set(player1.position.x,player1.position.y+3,player1.position.z+6);
+   camera.lookAt(player1.position.x,player1.position.y+1,player1.position.z);
+ } else {
+   player1.model.visible=false;
+   camera.position.set(player1.position.x,player1.position.y+1,player1.position.z);
+   camera.rotation.order="YXZ";
+   camera.rotation.y=yaw; camera.rotation.x=pitch;
+ }
+
+ renderer.render(scene,camera);
+}
+
+animate();
+window.addEventListener("resize",()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
+</script>
+
+</body>
+</html>
